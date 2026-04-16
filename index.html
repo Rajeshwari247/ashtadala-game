@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Ashtadala – The Fading Lotus</title>
+
+  <!-- A-Frame -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+  <!-- AR.js for A-Frame (marker-based) -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── SPLASH SCREEN ── */
+    #splash {
+      position: fixed; inset: 0; z-index: 9999;
+      background: radial-gradient(ellipse at 60% 40%, #1a0a00 0%, #0d0500 60%, #000 100%);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-family: 'Crimson Pro', serif;
+      color: #f5c97a;
+      padding: 2rem;
+      text-align: center;
+    }
+    #splash::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: repeating-linear-gradient(
+        45deg,
+        transparent, transparent 40px,
+        rgba(200,140,40,0.03) 40px, rgba(200,140,40,0.03) 41px
+      );
+      pointer-events: none;
+    }
+    .lotus-icon {
+      font-size: 4rem;
+      margin-bottom: 0.5rem;
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { filter: drop-shadow(0 0 8px #f5a623); }
+      50%       { filter: drop-shadow(0 0 24px #ff6b00); }
+    }
+    #splash h1 {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: #f5c97a;
+      letter-spacing: 0.05em;
+      line-height: 1.2;
+      text-shadow: 0 0 30px rgba(245,169,35,0.6);
+      margin-bottom: 0.3rem;
+    }
+    #splash .subtitle {
+      font-style: italic;
+      font-size: 0.95rem;
+      color: #b8864a;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.1em;
+    }
+    .story-box {
+      background: rgba(245,169,35,0.07);
+      border: 1px solid rgba(245,169,35,0.2);
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      font-size: 0.9rem;
+      color: #d4a85a;
+      line-height: 1.7;
+      max-width: 340px;
+      margin-bottom: 1.5rem;
+    }
+    .story-box strong { color: #f5c97a; }
+
+    /* Player name input */
+    #splash input[type=text] {
+      width: 100%; max-width: 280px;
+      padding: 0.75rem 1rem;
+      background: rgba(245,169,35,0.1);
+      border: 1px solid rgba(245,169,35,0.4);
+      border-radius: 8px;
+      color: #f5c97a;
+      font-family: 'Crimson Pro', serif;
+      font-size: 1rem;
+      text-align: center;
+      outline: none;
+      margin-bottom: 1rem;
+    }
+    #splash input[type=text]::placeholder { color: rgba(245,169,35,0.4); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #c8780a, #f5a623);
+      border: none; border-radius: 10px;
+      padding: 0.85rem 2.5rem;
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 0.9rem;
+      color: #1a0800;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      box-shadow: 0 4px 20px rgba(245,140,0,0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-primary:active { transform: scale(0.96); box-shadow: 0 2px 10px rgba(245,140,0,0.3); }
+
+    /* ── HUD OVERLAY ── */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: none;
+      padding: 0.6rem 1rem;
+      background: linear-gradient(180deg, rgba(10,4,0,0.92) 0%, transparent 100%);
+      font-family: 'Crimson Pro', serif;
+      color: #f5c97a;
+      pointer-events: none;
+    }
+    #hud .hud-top {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    #hud .game-title {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      color: #b8864a;
+    }
+    #hud .timer-display {
+      font-size: 1.4rem;
+      font-weight: 300;
+      color: #f5c97a;
+      letter-spacing: 0.05em;
+    }
+    #hud .timer-display.urgent { color: #ff4444; animation: blink 0.5s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0.4; } }
+
+    /* Petal health bar strip */
+    #petal-strip {
+      display: flex; gap: 4px; margin-top: 6px;
+      justify-content: center;
+    }
+    .petal-dot {
+      width: 28px; height: 8px; border-radius: 4px;
+      background: #333;
+      transition: background 0.3s;
+    }
+    .petal-dot.full    { background: #f5a623; box-shadow: 0 0 6px #f5a623; }
+    .petal-dot.mid     { background: #c86400; }
+    .petal-dot.low     { background: #7a2000; }
+    .petal-dot.dead    { background: #1a0800; }
+    .petal-dot.guarded { background: #00e5ff; box-shadow: 0 0 8px #00e5ff; }
+
+    /* Score / status bottom bar */
+    #bottom-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      display: none;
+      padding: 0.75rem 1rem 1.2rem;
+      background: linear-gradient(0deg, rgba(10,4,0,0.95) 0%, transparent 100%);
+      font-family: 'Crimson Pro', serif;
+      color: #f5c97a;
+      text-align: center;
+      pointer-events: none;
+    }
+    #status-msg {
+      font-size: 0.9rem;
+      color: #d4a85a;
+      font-style: italic;
+      min-height: 1.2em;
+    }
+    #score-display {
+      font-size: 1.1rem;
+      margin-top: 2px;
+    }
+
+    /* Storm warning banner */
+    #storm-banner {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 200;
+      background: rgba(180,20,0,0.92);
+      border: 2px solid #ff4444;
+      border-radius: 12px;
+      padding: 1rem 2rem;
+      font-family: 'Cinzel Decorative', serif;
+      color: #fff;
+      font-size: 1rem;
+      text-align: center;
+      display: none;
+      animation: shake 0.4s ease;
+    }
+    @keyframes shake {
+      0%,100%{transform:translate(-50%,-50%)}
+      20%{transform:translate(-48%,-50%)}
+      40%{transform:translate(-52%,-50%)}
+      60%{transform:translate(-48%,-50%)}
+      80%{transform:translate(-52%,-50%)}
+    }
+
+    /* ── END SCREEN ── */
+    #endscreen {
+      position: fixed; inset: 0; z-index: 9999;
+      background: radial-gradient(ellipse at 50% 50%, #1a0a00, #000);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-family: 'Crimson Pro', serif;
+      color: #f5c97a;
+      padding: 2rem;
+      text-align: center;
+    }
+    #endscreen h2 {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 1.6rem;
+      margin-bottom: 0.5rem;
+      text-shadow: 0 0 30px rgba(245,169,35,0.8);
+    }
+    #final-score {
+      font-size: 3rem;
+      font-weight: 300;
+      margin: 0.5rem 0;
+      color: #f5a623;
+    }
+    #final-verdict {
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #b8864a;
+      margin-bottom: 1.5rem;
+    }
+    #scoreboard {
+      background: rgba(245,169,35,0.07);
+      border: 1px solid rgba(245,169,35,0.2);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem;
+      width: 100%; max-width: 320px;
+      font-size: 0.95rem;
+      line-height: 1.8;
+    }
+    .score-row { display: flex; justify-content: space-between; }
+    .score-row .name { color: #d4a85a; }
+    .score-row .pts  { color: #f5c97a; font-weight: 400; }
+
+    /* ── AR SCENE ── */
+    a-scene { display: none; }
+    a-scene.visible { display: block; }
+
+    /* Instruct overlay when AR is active */
+    #ar-instruction {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      z-index: 150;
+      background: rgba(10,4,0,0.8);
+      border: 1px solid rgba(245,169,35,0.3);
+      border-radius: 20px;
+      padding: 0.4rem 1rem;
+      font-family: 'Crimson Pro', serif;
+      font-size: 0.8rem;
+      color: #b8864a;
+      font-style: italic;
+      white-space: nowrap;
+      pointer-events: none;
+      transition: opacity 1s;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SPLASH / LOBBY
+══════════════════════════════════════════ -->
+<div id="splash">
+  <div class="lotus-icon">🪷</div>
+  <h1>Ashtadala</h1>
+  <p class="subtitle">The Fading Lotus</p>
+
+  <div class="story-box">
+    A <strong>mischievous Yaksha</strong> has begun erasing the sacred 8-petal lotus
+    that protects this pavilion. Each petal is anchored to a pillar —
+    but all are <strong>slowly fading</strong>.<br><br>
+    Stand near a pillar to <strong>guard its petal</strong>.
+    You cannot cover all eight. <em>Decide wisely.</em><br><br>
+    Keep the lotus alive for <strong>3 minutes</strong> to defeat the Yaksha.
+  </div>
+
+  <input type="text" id="player-name" placeholder="Enter your guardian name…" maxlength="16" />
+  <button class="btn-primary" onclick="startGame()">Begin the Ritual</button>
+</div>
+
+<!-- ══════════════════════════════════════════
+     HUD
+══════════════════════════════════════════ -->
+<div id="hud">
+  <div class="hud-top">
+    <span class="game-title">🪷 ASHTADALA</span>
+    <span class="timer-display" id="timer-display">3:00</span>
+  </div>
+  <div id="petal-strip">
+    <!-- 8 dots injected by JS -->
+  </div>
+</div>
+
+<div id="bottom-bar">
+  <div id="status-msg">Point your phone at a pillar marker…</div>
+  <div id="score-display">Your guard score: <strong id="my-score">0</strong></div>
+</div>
+
+<div id="storm-banner">
+  ⚡ The Yaksha storms!<br>
+  <span style="font-size:0.8rem;font-family:'Crimson Pro',serif;font-style:italic">
+    3 petals fading faster…
+  </span>
+</div>
+
+<div id="ar-instruction">👁 Point camera at a pillar marker to see its petal</div>
+
+<!-- ══════════════════════════════════════════
+     END SCREEN
+══════════════════════════════════════════ -->
+<div id="endscreen">
+  <div class="lotus-icon">🪷</div>
+  <h2 id="end-title">The Lotus Endures</h2>
+  <div id="final-score">72%</div>
+  <div id="final-verdict">The Yaksha retreats… for now.</div>
+  <div id="scoreboard"></div>
+  <button class="btn-primary" onclick="location.reload()">Play Again</button>
+</div>
+
+<!-- ══════════════════════════════════════════
+     AR SCENE  (8 markers, one per pillar)
+══════════════════════════════════════════ -->
+<a-scene
+  id="ar-scene"
+  embedded
+  arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+  vr-mode-ui="enabled: false"
+  renderer="logarithmicDepthBuffer: true; precision: medium;"
+>
+  <a-assets>
+    <!-- We use procedural geometry — no external assets needed -->
+  </a-assets>
+
+  <!--
+    MARKER IDs 0-7 (3x3 matrix barcodes).
+    Print these from: https://au.gmented.com/app/marker/marker.php
+    Choose "Matrix" type, IDs 0 through 7.
+    One printed card per pillar.
+  -->
+
+  <!-- PETAL 0 -->
+  <a-marker type="barcode" value="0" id="marker-0" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-0">
+      <!-- Petal base: glowing torus ring -->
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#ff6b35" emissive="#ff4400" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <!-- Inner petal flower (8 petals via repeated planes) -->
+      <a-entity id="flower-0" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#ff8c55" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ff8c55" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ff8c55" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ff8c55" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <!-- Centre gem -->
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <!-- Brightness indicator text -->
+      <a-text value="Petal 1\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-0"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 1 -->
+  <a-marker type="barcode" value="1" id="marker-1" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-1">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#e040fb" emissive="#cc00ff" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-1" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#e070ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#e070ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#e070ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#e070ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 2\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-1"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 2 -->
+  <a-marker type="barcode" value="2" id="marker-2" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-2">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#00e676" emissive="#00cc44" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-2" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#44ff88" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#44ff88" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#44ff88" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#44ff88" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 3\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-2"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 3 -->
+  <a-marker type="barcode" value="3" id="marker-3" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-3">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#40c4ff" emissive="#0088ff" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-3" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#66d4ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#66d4ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#66d4ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#66d4ff" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 4\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-3"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 4 -->
+  <a-marker type="barcode" value="4" id="marker-4" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-4">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#ffeb3b" emissive="#ffaa00" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-4" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#fff066" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#fff066" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#fff066" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#fff066" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 5\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-4"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 5 -->
+  <a-marker type="barcode" value="5" id="marker-5" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-5">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#ff4081" emissive="#cc0044" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-5" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#ff6699" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ff6699" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ff6699" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ff6699" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 6\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-5"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 6 -->
+  <a-marker type="barcode" value="6" id="marker-6" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-6">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#69f0ae" emissive="#00aa66" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-6" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#88ffcc" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#88ffcc" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#88ffcc" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#88ffcc" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 7\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-6"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <!-- PETAL 7 -->
+  <a-marker type="barcode" value="7" id="marker-7" smooth="true" smoothCount="5">
+    <a-entity id="petal-entity-7">
+      <a-torus position="0 0.05 0" rotation="-90 0 0"
+               radius="0.18" radius-tubular="0.012"
+               color="#ff9100" emissive="#cc5500" emissive-intensity="0.8"
+               animation="property: rotation; to: -90 360 0; loop: true; dur: 4000; easing: linear">
+      </a-torus>
+      <a-entity id="flower-7" position="0 0.06 0" rotation="-90 0 0">
+        <a-plane width="0.1" height="0.25" color="#ffaa44" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 0"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ffaa44" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 45"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ffaa44" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 90"></a-plane>
+        <a-plane width="0.1" height="0.25" color="#ffaa44" opacity="0.85"
+                 position="0 0.09 0" rotation="0 0 135"></a-plane>
+        <a-sphere radius="0.04" color="#ffe066" emissive="#ffcc00" emissive-intensity="1"
+                  position="0 0 0"></a-sphere>
+      </a-entity>
+      <a-text value="Petal 8\n100%" align="center" color="#ffe066"
+              position="0 0.35 0" scale="0.25 0.25 0.25"
+              id="petal-text-7"></a-text>
+    </a-entity>
+  </a-marker>
+
+  <a-entity camera></a-entity>
+</a-scene>
+
+<!-- ══════════════════════════════════════════
+     GAME LOGIC
+══════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────
+// FIREBASE CONFIG
+// Replace with YOUR Firebase project config.
+// Free at console.firebase.google.com → Create project → Realtime Database
+// ─────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// ─────────────────────────────────────────
+// GAME CONSTANTS
+// ─────────────────────────────────────────
+const GAME_DURATION    = 180;   // seconds (3 minutes)
+const FADE_RATE        = 0.8;   // % per second normal fade
+const STORM_FADE_RATE  = 2.5;   // % per second during storm
+const STORM_PETALS     = 3;     // how many petals the storm hits
+const STORM_AT         = 90;    // seconds remaining when storm hits
+const NUM_PETALS       = 8;
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+let playerName    = "Guardian";
+let playerId      = "p_" + Math.random().toString(36).substr(2, 6);
+let gameActive    = false;
+let timeLeft      = GAME_DURATION;
+let myScore       = 0;
+let stormActive   = false;
+let stormPetals   = [];
+let stormShown    = false;
+
+// Petal brightness 0-100
+let petals = Array(NUM_PETALS).fill(100);
+
+// Which markers are currently visible on THIS device
+let markerVisible = Array(NUM_PETALS).fill(false);
+
+// Firebase refs
+let db, gameRef, petalsRef, playersRef, guardRef;
+
+// ─────────────────────────────────────────
+// INIT FIREBASE (graceful fallback if not configured)
+// ─────────────────────────────────────────
+function initFirebase() {
+  try {
+    if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+      console.warn("Firebase not configured — running in single-player mode");
+      return false;
+    }
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    gameRef   = db.ref("ashtadala/game");
+    petalsRef = db.ref("ashtadala/petals");
+    playersRef= db.ref("ashtadala/players");
+    guardRef  = db.ref("ashtadala/guarding");
+    return true;
+  } catch(e) {
+    console.warn("Firebase error:", e);
+    return false;
+  }
+}
+
+const firebaseOK = initFirebase();
+
+// ─────────────────────────────────────────
+// BUILD HUD PETAL STRIP
+// ─────────────────────────────────────────
+function buildPetalStrip() {
+  const strip = document.getElementById("petal-strip");
+  strip.innerHTML = "";
+  for (let i = 0; i < NUM_PETALS; i++) {
+    const dot = document.createElement("div");
+    dot.className = "petal-dot full";
+    dot.id = "pdot-" + i;
+    strip.appendChild(dot);
+  }
+}
+
+// ─────────────────────────────────────────
+// START GAME
+// ─────────────────────────────────────────
+function startGame() {
+  const nameInput = document.getElementById("player-name").value.trim();
+  playerName = nameInput || "Guardian";
+
+  // Hide splash, show AR + HUD
+  document.getElementById("splash").style.display = "none";
+  document.getElementById("hud").style.display = "block";
+  document.getElementById("bottom-bar").style.display = "block";
+
+  const scene = document.getElementById("ar-scene");
+  scene.classList.add("visible");
+
+  buildPetalStrip();
+  setupMarkerListeners();
+
+  if (firebaseOK) {
+    syncWithFirebase();
+  } else {
+    // Solo mode — just run locally
+    gameActive = true;
+    runGameLoop();
+  }
+}
+
+// ─────────────────────────────────────────
+// MARKER LISTENERS — detect when camera sees a pillar
+// ─────────────────────────────────────────
+function setupMarkerListeners() {
+  for (let i = 0; i < NUM_PETALS; i++) {
+    const marker = document.getElementById("marker-" + i);
+    if (!marker) continue;
+
+    const idx = i;
+    marker.addEventListener("markerFound", () => {
+      markerVisible[idx] = true;
+      setStatusMsg(`🪷 Guarding Petal ${idx + 1}…`);
+      if (firebaseOK && guardRef) {
+        guardRef.child(playerId + "_" + idx).set(true);
+      }
+    });
+    marker.addEventListener("markerLost", () => {
+      markerVisible[idx] = false;
+      if (firebaseOK && guardRef) {
+        guardRef.child(playerId + "_" + idx).remove();
+      }
+    });
+  }
+}
+
+// ─────────────────────────────────────────
+// FIREBASE SYNC
+// ─────────────────────────────────────────
+function syncWithFirebase() {
+  // Register player
+  playersRef.child(playerId).set({ name: playerName, score: 0 });
+  playersRef.child(playerId).onDisconnect().remove();
+
+  // Listen for petal state from Firebase (host writes, others read)
+  petalsRef.on("value", snap => {
+    const data = snap.val();
+    if (data) {
+      for (let i = 0; i < NUM_PETALS; i++) {
+        if (data[i] !== undefined) petals[i] = data[i];
+      }
+      updateAllPetalVisuals();
+    }
+  });
+
+  // Elect host: first player to write wins
+  gameRef.transaction(current => {
+    if (!current) return { host: playerId, started: false };
+    return; // abort — already set
+  }, (err, committed) => {
+    if (committed) {
+      // We are host — run the game loop and write petal state
+      gameActive = true;
+      // Initialise petals in Firebase
+      const init = {};
+      for (let i = 0; i < NUM_PETALS; i++) init[i] = 100;
+      petalsRef.set(init);
+      runGameLoop(true);
+    } else {
+      // We are a client — just react to Firebase updates
+      gameActive = true;
+      runClientLoop();
+    }
+  });
+}
+
+// ─────────────────────────────────────────
+// HOST GAME LOOP — runs timer, fades petals, writes to Firebase
+// ─────────────────────────────────────────
+function runGameLoop(isHost = false) {
+  const interval = setInterval(() => {
+    if (!gameActive) { clearInterval(interval); return; }
+
+    timeLeft -= 1;
+    updateTimer();
+
+    // Pick storm petals once
+    if (!stormShown && timeLeft <= STORM_AT) {
+      stormShown = true;
+      stormActive = true;
+      stormPetals = pickRandom(NUM_PETALS, STORM_PETALS);
+      showStormBanner();
+      setTimeout(() => { stormActive = false; }, 20000); // storm lasts 20s
+    }
+
+    // Determine which petals are guarded (locally visible)
+    const guardedLocally = new Set();
+    for (let i = 0; i < NUM_PETALS; i++) {
+      if (markerVisible[i]) guardedLocally.add(i);
+    }
+
+    // Fade petals
+    for (let i = 0; i < NUM_PETALS; i++) {
+      if (guardedLocally.has(i)) {
+        // Guarded — hold brightness, earn score
+        myScore += 1;
+        continue;
+      }
+      const rate = (stormActive && stormPetals.includes(i)) ? STORM_FADE_RATE : FADE_RATE;
+      petals[i] = Math.max(0, petals[i] - rate);
+    }
+
+    // Write to Firebase if host
+    if (isHost && firebaseOK && petalsRef) {
+      const update = {};
+      for (let i = 0; i < NUM_PETALS; i++) update[i] = Math.round(petals[i]);
+      petalsRef.set(update);
+    }
+
+    updateAllPetalVisuals();
+    updateScoreDisplay();
+
+    if (timeLeft <= 0) {
+      clearInterval(interval);
+      endGame();
+    }
+  }, 1000);
+}
+
+// ─────────────────────────────────────────
+// CLIENT LOOP — tracks local guarding & score only
+// ─────────────────────────────────────────
+function runClientLoop() {
+  const interval = setInterval(() => {
+    if (!gameActive) { clearInterval(interval); return; }
+    timeLeft -= 1;
+    updateTimer();
+
+    for (let i = 0; i < NUM_PETALS; i++) {
+      if (markerVisible[i]) myScore += 1;
+    }
+
+    updateScoreDisplay();
+
+    if (timeLeft <= 0) {
+      clearInterval(interval);
+      endGame();
+    }
+  }, 1000);
+}
+
+// ─────────────────────────────────────────
+// VISUALS
+// ─────────────────────────────────────────
+function updateAllPetalVisuals() {
+  for (let i = 0; i < NUM_PETALS; i++) {
+    updatePetalVisual(i, petals[i]);
+  }
+}
+
+function updatePetalVisual(idx, brightness) {
+  const b = Math.round(brightness);
+  const guarded = markerVisible[idx];
+
+  // Update AR petal opacity
+  const entity = document.getElementById("petal-entity-" + idx);
+  if (entity) {
+    const opacity = guarded ? 1.0 : Math.max(0.05, b / 100);
+    entity.setAttribute("opacity", opacity);
+    // Tint petals blue-white when guarded
+    const torus = entity.querySelector("a-torus");
+    if (torus && guarded) torus.setAttribute("emissive", "#00ccff");
+  }
+
+  // Update AR text
+  const txt = document.getElementById("petal-text-" + idx);
+  if (txt) {
+    const label = guarded ? `Petal ${idx+1}\n✦ GUARDED` : `Petal ${idx+1}\n${b}%`;
+    txt.setAttribute("value", label);
+  }
+
+  // Update HUD dot
+  const dot = document.getElementById("pdot-" + idx);
+  if (dot) {
+    if (guarded)     { dot.className = "petal-dot guarded"; }
+    else if (b > 65) { dot.className = "petal-dot full"; }
+    else if (b > 35) { dot.className = "petal-dot mid"; }
+    else if (b > 5)  { dot.className = "petal-dot low"; }
+    else             { dot.className = "petal-dot dead"; }
+  }
+}
+
+function updateTimer() {
+  const m = Math.floor(timeLeft / 60);
+  const s = timeLeft % 60;
+  const display = document.getElementById("timer-display");
+  display.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+  display.className = "timer-display" + (timeLeft <= 30 ? " urgent" : "");
+}
+
+function updateScoreDisplay() {
+  document.getElementById("my-score").textContent = myScore;
+}
+
+function setStatusMsg(msg) {
+  document.getElementById("status-msg").textContent = msg;
+}
+
+function showStormBanner() {
+  const banner = document.getElementById("storm-banner");
+  banner.style.display = "block";
+  setTimeout(() => { banner.style.display = "none"; }, 3000);
+}
+
+// ─────────────────────────────────────────
+// END GAME
+// ─────────────────────────────────────────
+async function endGame() {
+  gameActive = false;
+
+  // Write final score to Firebase
+  if (firebaseOK && playersRef) {
+    await playersRef.child(playerId).update({ name: playerName, score: myScore });
+  }
+
+  // Compute average brightness
+  const avg = Math.round(petals.reduce((a,b) => a+b, 0) / NUM_PETALS);
+
+  // Wait a moment for other players to write scores
+  setTimeout(async () => {
+    let scoreboard = [{ name: playerName, score: myScore }];
+
+    if (firebaseOK && playersRef) {
+      const snap = await playersRef.once("value");
+      const data = snap.val() || {};
+      scoreboard = Object.values(data).sort((a,b) => b.score - a.score);
+      // Clean up
+      gameRef.remove();
+      petalsRef.remove();
+      playersRef.remove();
+      guardRef && guardRef.remove();
+    }
+
+    showEndScreen(avg, scoreboard);
+  }, 1500);
+}
+
+function showEndScreen(avg, scoreboard) {
+  document.getElementById("ar-scene").classList.remove("visible");
+  document.getElementById("hud").style.display = "none";
+  document.getElementById("bottom-bar").style.display = "none";
+  document.getElementById("ar-instruction").style.display = "none";
+
+  const endEl = document.getElementById("endscreen");
+  endEl.style.display = "flex";
+
+  document.getElementById("final-score").textContent = avg + "%";
+
+  let title, verdict;
+  if (avg >= 75) {
+    title = "The Lotus Endures! 🪷";
+    verdict = "The Yaksha flees in defeat. The pavilion is protected.";
+  } else if (avg >= 50) {
+    title = "The Lotus Wavers…";
+    verdict = "The Yaksha lingers. You must try again, guardian.";
+  } else {
+    title = "The Lotus Fades 💀";
+    verdict = "The Yaksha has won. The pavilion falls dark.";
+  }
+
+  document.getElementById("end-title").textContent = title;
+  document.getElementById("final-verdict").textContent = verdict;
+
+  const board = document.getElementById("scoreboard");
+  board.innerHTML = "<strong style='display:block;margin-bottom:0.5rem;color:#f5c97a'>Guardian Scores</strong>" +
+    scoreboard.map((p,i) =>
+      `<div class="score-row">
+        <span class="name">${i===0?'🥇':i===1?'🥈':'🥉'} ${p.name}</span>
+        <span class="pts">${p.score} pts</span>
+      </div>`
+    ).join("");
+}
+
+// ─────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────
+function pickRandom(max, count) {
+  const arr = Array.from({length: max}, (_,i) => i);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, count);
+}
+
+// Hide AR instruction after 10s
+setTimeout(() => {
+  const el = document.getElementById("ar-instruction");
+  if (el) el.style.opacity = "0";
+}, 10000);
+</script>
+
+</body>
+</html>
